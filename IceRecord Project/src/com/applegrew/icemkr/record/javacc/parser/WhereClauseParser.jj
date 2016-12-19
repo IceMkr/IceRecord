@@ -1,0 +1,488 @@
+
+options {
+  JAVA_UNICODE_ESCAPE = true;
+  IGNORE_CASE = true;
+  STATIC = false;
+  LOOKAHEAD = 3;
+  FORCE_LA_CHECK = true;
+  DEBUG_PARSER = true;
+  DEBUG_LOOKAHEAD = false;
+  DEBUG_TOKEN_MANAGER = false;
+}
+
+PARSER_BEGIN(WhereClauseParser)
+
+package com.applegrew.icemkr.record.javacc.parser;
+
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.google.common.base.MoreObjects;
+
+public class WhereClauseParser {
+
+    private ParsedExpression model;
+    
+    public WhereClauseParser(String s) {
+        this((Reader)(new StringReader(s)));
+        model = new ParsedExpression();
+    }
+
+    public static void main(String args[]) {
+        try {
+            WhereClauseParser parser = new WhereClauseParser("(abcd.f1 = 1 AND f2 <> 2) And f9 = ? OR (f3 <= f4 AND f5 IN [1, 2, 3]) AND f6 IN (SELECT fa1 from a A Where A.b = \"m\") ");
+            System.out.println(parser.parse());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public ParsedExpression parse() throws ParseException {
+        model.rootCondition = this.expression();
+        return model;
+    }
+    
+    public static class FieldPair {
+        /**
+        * Could be alias name also or null
+        */
+        public String tableName;
+        public String fieldName;
+        
+        public String getQualifiedFieldName () {
+            if (this.tableName != null)
+                return this.tableName + "." + this.fieldName;
+            return this.fieldName;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("tableName", tableName)
+                .add("fieldName", fieldName)
+                .toString();
+        }
+    }
+
+    public static class ParsedExpression {
+        public List<FieldExpression> paramFields = new ArrayList<FieldExpression>();
+        public List<SubQuery> allSubQueries = new ArrayList<SubQuery>();
+        public Condition rootCondition;
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("paramFields", paramFields)
+                .add("allSubQueries", allSubQueries)
+                .add("rootCondition", rootCondition)
+                .toString();
+        }
+    }
+
+    public static enum AndOrOp {
+        AND, OR
+    }
+
+    public static interface Op {
+    }
+
+    public static enum BinaryOp implements Op {
+        EQ, NEQ, LT, LTE, GT, GTE, LIKE, IN, NOT_IN, CONTAINS, STARTSWITH, ENDSWITH;
+        
+        public BinaryOp inverse() {
+            if (this.equals(LT))
+                return BinaryOp.GT;
+            if (this.equals(LTE))
+                return BinaryOp.GTE;
+            if (this.equals(GT))
+                return BinaryOp.LT;
+            if (this.equals(GTE))
+                return BinaryOp.LTE;
+            return this;
+        }
+    }
+
+    public static enum UnaryOp implements Op {
+        IS_NULL, IS_NOT_NULL
+    }
+    
+    public static interface Value {
+        Object getValue();
+    }
+    
+    public static class IntConst implements Value {
+        int val;
+        public Integer getValue() {
+            return val;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("val", val)
+                .toString();
+        }
+    }
+    
+    public static class StringConst implements Value {
+        String val;
+        public String getValue() {
+            return val;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("val", val)
+                .toString();
+        }
+    }
+    
+    public static class FloatConst implements Value {
+        float val;
+        public Float getValue() {
+            return val;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("val", val)
+                .toString();
+        }
+    }
+
+    public static class ArrayConst implements Value {
+        List<Object> val = new ArrayList<Object>();
+        public List<Object> getValue() {
+            return val;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("val", val)
+                .toString();
+        }
+    }
+    
+    public static class ParamConst implements Value {
+        public Object val;
+        public Object getValue() {
+            return val;
+        }
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .toString();
+        }
+    }
+
+    public static class SubQuery implements Value {
+        public Object getValue() {
+            return null;
+        }
+        
+        public String table;
+        /** Could be null
+        */
+        public String alias;
+        public String selectFieldName;
+        
+        public Condition condition;
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("table", table)
+                .add("alias", alias)
+                .add("condition", condition)
+                .toString();
+        }
+    }
+
+    public static class Condition {
+        public List<QueryTerm> terms = new ArrayList<QueryTerm>();
+        /** The no. of item in ops will be one less than in terms,
+        * because it comes in-between
+        */
+        public List<AndOrOp> ops = new ArrayList<AndOrOp>();
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("terms", terms)
+                .add("ops", ops)
+                .toString();
+        }
+    }
+
+    public static class FieldExpression {
+        public FieldPair field;
+        public Op op;
+        public Value value;
+        public Value lhsValue;
+        public FieldPair rhsField;
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("field", field)
+                .add("value", value)
+                .add("lhsValue", lhsValue)
+                .add("rhsField", rhsField)
+                .add("op", op)
+                .toString();
+        }
+    }
+
+    /**
+    * Only one of them will be set
+    */
+    public static class QueryTerm {
+        public FieldExpression fieldExp;
+        public Condition conditionExp;
+        
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("fieldExp", fieldExp)
+                .add("conditionExp", conditionExp)
+                .toString();
+        }
+    }
+}
+
+PARSER_END(WhereClauseParser)
+
+
+/**********************************************
+ * THE TOKEN SPECIFICATION STARTS HERE *
+ **********************************************/
+
+/* WHITE SPACE */
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "\f"
+}
+
+/* RESERVED WORDS AND LITERALS */
+
+TOKEN :
+{
+  < LPAREN: "(" >
+| < RPAREN: ")" >
+| < LBRACKET: "[" >
+| < RBRACKET: "]" >
+| < SELECT: "select" >
+| < FROM: "from" >
+| < WHERE: "where" >
+| < DOT: "." >
+| < COMMA: "," >
+| < IN: "in" >
+| < CONTAINS: "contains" >
+| < STARTSWITH: "startswith" >
+| < ENDSWITH: "endswith" >
+| < LIKE: "like" >
+| < NOT: "not" >
+| < IS: "is" >
+| < NULL: "null" >
+| < LTE: "<=" >
+| < GTE: ">=" >
+| < NOT_EQUALS: "<>" >
+| < EQUALS: "=" >
+| < LT: "<" >
+| < GT: ">" >
+| < PARAM: "?" >
+| < AND: "and" >
+| < OR: "or" >
+| < INTEGER: (["+","-"])?(["0"-"9"])+ >
+| < FLOAT: (["+","-"])?(["0"-"9"])+"."(["0"-"9"])+ >
+| < STRING: ["A"-"Z", "a"-"z"](["A"-"Z", "a"-"z", "0"-"9", "_"])* >
+| < STRING_CONST: "\"" (~["\""])+ "\"" >
+}
+
+/************************************************
+ * THE GRAMMAR SPECIFICATION STARTS HERE *
+ ************************************************/
+
+private Condition expression() :
+{
+    Condition cond = new Condition();
+    QueryTerm qt;
+}
+{(
+  (qt=query_term() { cond.terms.add(qt); })
+  ( ( (<AND> { cond.ops.add(AndOrOp.AND); }) | (<OR> { cond.ops.add(AndOrOp.OR); }) )
+    (qt=query_term() { cond.terms.add(qt); }) )*
+  
+  ){return cond;}
+}
+
+private QueryTerm query_term() :
+{
+    QueryTerm qt = new QueryTerm();
+    FieldExpression fe;
+    Condition cond;
+}
+{(
+  (fe=simple_query_term_part() { qt.fieldExp = fe; })
+  | (fe=complex_query_term_part() { qt.fieldExp = fe; })
+  | ((<LPAREN> cond=expression() <RPAREN>) { qt.conditionExp = cond; })
+  
+  ){ return qt; }
+}
+
+private FieldExpression simple_query_term_part() :
+{
+    FieldExpression fe = new FieldExpression();
+    FieldPair fp;
+    FieldPair rhsFp;
+    Op op;
+    Value v;
+    Value lhsV;
+}
+{(
+  ((fp=field_pair() op=binary_op() v=_const()) { fe.field = fp; fe.op = op; fe.value = v; } )
+  | ((fp=field_pair() op=binary_op() rhsFp=field_pair())
+        { if (op.equals(BinaryOp.CONTAINS) || op.equals(BinaryOp.ENDSWITH) || op.equals(BinaryOp.LIKE) || op.equals(BinaryOp.STARTSWITH))
+            throw new ParseException("Illegal operator " + op + " used between fields comparison.");
+        fe.field = fp; fe.op = op; fe.rhsField = rhsFp; } )
+  | ((v=_const() op=binary_op() fp=field_pair()) { fe.field = fp; fe.op = ((BinaryOp) op).inverse(); fe.value = v; } )
+  | ((lhsV=_const() op=binary_op() v=_const())
+        { if (lhsV instanceof ArrayConst) throw new ParseException("LHS expression cannot have Arrays"); fe.lhsValue = lhsV; fe.op = op; fe.value = v; } )
+  | ((fp=field_pair() op=binary_op() <PARAM>) { fe.field = fp; fe.op = op; fe.value = new ParamConst(); this.model.paramFields.add(fe); } )
+  | ((fp=field_pair() op=unary_op()) { fe.field = fp; fe.op = op; } )
+  
+  ){ return fe; }
+}
+
+private FieldExpression complex_query_term_part() :
+{
+    FieldExpression fe = new FieldExpression();
+    FieldPair fp;
+    Op op;
+    Value v;
+    Value lhsV;
+}
+{(
+  ((fp=field_pair() op=binary_op() v=sub_query()) { fe.field = fp; fe.op = op; fe.value = v; } )
+  | ((lhsV=_const() op=binary_op() v=sub_query()) { fe.lhsValue = lhsV; fe.op = op; fe.value = v; } )
+  
+  ){ return fe; }
+}
+
+private Condition simple_expression() :
+{
+    Condition cond = new Condition();
+    QueryTerm qt;
+}
+{(
+  (qt=simple_query_term() { cond.terms.add(qt); })
+  ( ( (<AND> { cond.ops.add(AndOrOp.AND); }) | (<OR> { cond.ops.add(AndOrOp.OR); }) )
+    (qt=simple_query_term() { cond.terms.add(qt); }) )*
+  
+  ){return cond;}
+}
+
+private QueryTerm simple_query_term() :
+{
+    QueryTerm qt = new QueryTerm();
+    FieldExpression fe;
+    Condition cond;
+}
+{(
+  (fe=simple_query_term_part() { qt.fieldExp = fe; })
+  | ( (<LPAREN> cond=simple_expression() <RPAREN>) { qt.conditionExp = cond; } )
+  
+  ){ return qt; }
+}
+
+private FieldPair field_pair() :
+{
+    FieldPair fp = new FieldPair();
+    Token table;
+    Token field;
+}
+{(
+  ((table=<STRING><DOT>field=<STRING>) { fp.tableName = table.image; fp.fieldName = field.image; })
+  | (field=<STRING> { fp.fieldName = field.image; })
+  
+  ){ return fp; }
+}
+
+private BinaryOp binary_op() :
+{
+    BinaryOp op;
+}
+{(
+  (<CONTAINS> { op = BinaryOp.CONTAINS; })
+  | (<STARTSWITH> { op = BinaryOp.STARTSWITH; })
+  | (<ENDSWITH> { op = BinaryOp.ENDSWITH; })
+  | (<LIKE> { op = BinaryOp.LIKE; })
+  | (<IN> { op = BinaryOp.IN; })
+  | (<LTE> { op = BinaryOp.LTE; })
+  | (<GTE> { op = BinaryOp.GTE; })
+  | (<EQUALS> { op = BinaryOp.EQ; })
+  | (<NOT_EQUALS> { op = BinaryOp.NEQ; })
+  | (<LT> { op = BinaryOp.LT; })
+  | (<GT> { op = BinaryOp.GT; })
+  | ((<NOT> <IN>) { op = BinaryOp.NOT_IN; })
+  
+  ){ return op; }
+}
+
+private UnaryOp unary_op() :
+{
+    UnaryOp op;
+}
+{(
+  ((<IS> <NULL>) { op = UnaryOp.IS_NULL; })
+  | ((<IS> <NOT> <NULL>) { op = UnaryOp.IS_NOT_NULL; })
+
+  ){ return op; }
+}
+
+private Value _const() :
+{
+    Value val;
+    Token v;
+}
+{(
+  (v=<INTEGER> { val = new IntConst(); ((IntConst)val).val = Integer.parseInt(v.image); })
+  | (v=<FLOAT> { val = new FloatConst(); ((FloatConst)val).val = Float.parseFloat(v.image); })
+  | (v=<STRING_CONST> { val = new StringConst(); ((StringConst)val).val = v.image; })
+  | val=array()
+  
+  ){ return val; }
+}
+
+private ArrayConst array() :
+{
+    ArrayConst val = new ArrayConst();
+    Value v;
+}
+{(
+  <LBRACKET> (v=_const() { ((ArrayConst)val).val.add(v); }) (<COMMA> (v=_const() { ((ArrayConst)val).val.add(v); } ))* <RBRACKET>
+  
+  ){ return val; }
+}
+
+private SubQuery sub_query() :
+{
+    SubQuery sq = new SubQuery();
+    Token v;
+    Condition cond;
+}
+{(
+  <LPAREN> <SELECT> (v=<STRING> { sq.selectFieldName = v.image; })
+    <FROM> (v=<STRING> { sq.table = v.image; }) ((v=<STRING> { sq.alias = v.image; }))?
+    <WHERE> (cond=simple_expression() { sq.condition = cond; }) <RPAREN>
+    
+  ){
+    this.model.allSubQueries.add(sq);
+    return sq;
+  }
+}
+
+
+
+
+
