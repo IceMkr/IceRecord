@@ -7,11 +7,6 @@ import com.applegrew.icemkr.record.field.scalartype.IStringScalar;
 public class StringField extends Field<String> implements IStringScalar {
 
     @Override
-    public String getDefaultValue() {
-        return null; // TODO get default value after evaling expression in meta
-    }
-
-    @Override
     public String getScalarValue() {
         return value;
     }
@@ -27,6 +22,14 @@ public class StringField extends Field<String> implements IStringScalar {
         if (isLoadedValue)
             this.loadedValue = this.value;
         return true;
+    }
+
+    @Override
+    public void setValueFromDefault(String defaultValueExpression) {
+        if (defaultValueExpression != null && !defaultValueExpression.isEmpty())
+            value = defaultValueExpression;
+        else
+            value = null;
     }
 
 }

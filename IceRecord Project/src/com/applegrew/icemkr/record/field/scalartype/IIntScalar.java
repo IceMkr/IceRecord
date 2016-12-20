@@ -4,6 +4,4 @@ public interface IIntScalar extends IScalarBase {
 
     Integer getScalarValue();
 
-    Integer getDefaultValue();
-
 }

@@ -12,11 +12,6 @@ public class IntegerField extends Field<Integer> implements IIntScalar {
     }
 
     @Override
-    public Integer getDefaultValue() {
-        return null;
-    }
-
-    @Override
     public boolean setScalarValue(Object value, boolean isLoadedValue) {
         if (value == null) {
             this.value = null;
@@ -27,6 +22,18 @@ public class IntegerField extends Field<Integer> implements IIntScalar {
         if (isLoadedValue)
             this.loadedValue = this.value;
         return true;
+    }
+
+    @Override
+    public void setValueFromDefault(String defaultValueExpression) {
+        if (defaultValueExpression != null && !defaultValueExpression.isEmpty()) {
+            try {
+                value = Integer.parseInt(defaultValueExpression);
+                return;
+            } catch (NumberFormatException e) {
+            }
+        }
+        value = null;
     }
 
 }

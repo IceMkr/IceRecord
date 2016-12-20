@@ -35,7 +35,7 @@ public interface IceRecordConstants {
 
         String COLLECTION = "collection";
 
-        String UNIQUE = "unique";
+        String UNIQUE = "unique_";
     }
 
     int UNIQUEID_LENGTH = 36;
@@ -62,6 +62,8 @@ public interface IceRecordConstants {
         String POSITIVE_INTEGER = "positive_integer";
 
         String BOOLEAN = "boolean";
+
+        String TABLE_CHOICE = "table_choice";
     }
 
     public interface CoreTableNames {

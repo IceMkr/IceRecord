@@ -6,6 +6,4 @@ public interface IScalarBase {
 
     boolean setScalarValue(Object value, boolean isLoadedValue);
 
-    Object getDefaultValue();
-
 }

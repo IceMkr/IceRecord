@@ -34,6 +34,20 @@ public class Schema {
             this.dbName = dbName;
         }
 
+        public SchemaHandler deleteIfExists() {
+            if (connManager.isSchemaExists(dbName)) {
+                QueryRunner runner = new QueryRunner(schemalessDataSource);
+                try {
+                    runner.update("DROP DATABASE " + dbName + ";");
+                } catch (SQLException e) {
+                    hasError = true;
+                    lastError = IceRecordException.wrap(e);
+                    e.printStackTrace();
+                }
+            }
+            return this;
+        }
+
         public SchemaHandler createIfNotExists() {
             if (!connManager.isSchemaExists(dbName)) {
                 QueryRunner runner = new QueryRunner(schemalessDataSource);

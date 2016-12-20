@@ -91,20 +91,22 @@ public class FieldType {
 
     public enum ScalarType {
         STRING, INTEGER, FLOAT, LARGE_TEXT, BINARY_DATA, BOOLEAN, TIMESTAMP;
-        
-//        public static WhereClauseParser.Value wrapInValueInstance(Object o) {
-//            if (o instanceof List) {
-//                WhereClauseParser.ArrayConst v = new WhereClauseParser.ArrayConst();
-//                v.value
-//            }
-//        }
+
+        // public static WhereClauseParser.Value wrapInValueInstance(Object o) {
+        // if (o instanceof List) {
+        // WhereClauseParser.ArrayConst v = new WhereClauseParser.ArrayConst();
+        // v.value
+        // }
+        // }
     }
 
     private static final List<FieldType> TYPES;
     static {
         TYPES = Arrays.asList(
-                FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.STRING,
-                        StringField.class).build(),
+                FieldType
+                        .createWithNameAndFieldClass(
+                                IceRecordConstants.CoreFieldTypeNames.STRING, StringField.class)
+                        .build(),
                 FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.UUID,
                         UniqueIdField.class).build(),
                 FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.CHOICE,
@@ -112,25 +114,24 @@ public class FieldType {
                 FieldType.createWithNameAndFieldClass(
                         IceRecordConstants.CoreFieldTypeNames.FIELD_TYPE_CHOICE,
                         FieldTypeChoiceField.class).build(),
+                FieldType.createWithNameAndFieldClass(
+                        IceRecordConstants.CoreFieldTypeNames.TABLE_CHOICE,
+                        TableChoiceField.class).build(),
                 FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.PRIMARY,
                         UniqueIdField.class).whichIsPrimary().build(),
-                FieldType
-                        .createWithNameAndFieldClass(
-                                IceRecordConstants.CoreFieldTypeNames.PRIMARY_STRING,
-                                StringField.class)
+                FieldType.createWithNameAndFieldClass(
+                        IceRecordConstants.CoreFieldTypeNames.PRIMARY_STRING, StringField.class)
                         .whichIsPrimary().build(),
-                FieldType
-                        .createWithNameAndFieldClass(
-                                IceRecordConstants.CoreFieldTypeNames.REFERENCE,
-                                ReferenceField.class)
-                        .whichIsPrimary().build(),
+                FieldType.createWithNameAndFieldClass(
+                        IceRecordConstants.CoreFieldTypeNames.REFERENCE, ReferenceField.class)
+                        .build(),
                 FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.INTEGER,
-                        IntegerField.class).whichIsPrimary().build(),
+                        IntegerField.class).build(),
                 FieldType.createWithNameAndFieldClass(
                         IceRecordConstants.CoreFieldTypeNames.POSITIVE_INTEGER,
-                        PositiveIntegerField.class).whichIsPrimary().build(),
+                        PositiveIntegerField.class).build(),
                 FieldType.createWithNameAndFieldClass(IceRecordConstants.CoreFieldTypeNames.BOOLEAN,
-                        BooleanField.class).whichIsPrimary().build());
+                        BooleanField.class).build());
     }
 
     public static class StaticLookup implements ILookupFieldTypes {

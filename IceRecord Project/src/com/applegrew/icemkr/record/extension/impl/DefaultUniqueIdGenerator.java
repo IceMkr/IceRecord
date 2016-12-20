@@ -7,12 +7,12 @@ public class DefaultUniqueIdGenerator implements IUniqueIdGenerator {
 
     @Override
     public String generateNewUniqueId() {
-        return Generators.timeBasedGenerator().generate().toString();
+        return Generators.timeBasedGenerator().generate().toString().replace("-", "");
     }
 
     @Override
     public int getIdMaxLength() {
-        return 36;
+        return 36 - 4;
     }
 
 }

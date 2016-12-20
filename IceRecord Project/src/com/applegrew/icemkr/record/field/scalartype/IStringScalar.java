@@ -4,6 +4,4 @@ public interface IStringScalar extends IScalarBase {
 
     String getScalarValue();
 
-    String getDefaultValue();
-
 }

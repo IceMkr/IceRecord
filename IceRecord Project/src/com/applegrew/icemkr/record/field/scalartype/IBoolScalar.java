@@ -4,6 +4,4 @@ public interface IBoolScalar extends IScalarBase {
 
     Boolean getScalarValue();
 
-    Boolean getDefaultValue();
-
 }

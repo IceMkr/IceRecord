@@ -12,11 +12,6 @@ public class BooleanField extends Field<Boolean> implements IBoolScalar {
     }
 
     @Override
-    public Boolean getDefaultValue() {
-        return false;
-    }
-
-    @Override
     public boolean setScalarValue(Object value, boolean isLoadedValue) {
         if (value == null) {
             this.value = false;
@@ -35,6 +30,15 @@ public class BooleanField extends Field<Boolean> implements IBoolScalar {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void setValueFromDefault(String defaultValueExpression) {
+        if (defaultValueExpression != null && !defaultValueExpression.isEmpty()
+                && defaultValueExpression.equalsIgnoreCase("true"))
+            value = true;
+        else
+            value = false;
     }
 
 }

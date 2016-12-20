@@ -66,6 +66,8 @@ public abstract class Field<V> implements IScalarBase {
         this.fieldMeta = fieldMeta;
     }
 
+    abstract public void setValueFromDefault(String defaultValueExpression);
+
     @Override
     public int hashCode() {
         return this.fieldMeta.fieldName.hashCode();

@@ -9,14 +9,18 @@ import com.applegrew.icemkr.record.field.FieldType.ScalarType;
 public class UniqueIdField extends StringField {
     protected IUniqueIdGenerator generator;
 
-    protected String value;
-
     public UniqueIdField() {
         generator = IceRecordEnv.getExtComponent().createUniqueIdGenerator();
     }
 
     public boolean setGeneratedUUID() {
         String uuid = generator.generateNewUniqueId();
+        System.out.println("uuid=" + uuid);
         return setValue(uuid);
+    }
+
+    @Override
+    public String getScalarValue() {
+        return value;
     }
 }

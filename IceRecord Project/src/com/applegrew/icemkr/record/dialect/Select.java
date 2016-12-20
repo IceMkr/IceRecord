@@ -5,8 +5,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.applegrew.icemkr.record.dialect.Table.TableMeta;
-
 public class Select {
     private Select() {
     }
@@ -20,6 +18,19 @@ public class Select {
 
         public FromTable(String tableName) {
             this.tableName = tableName;
+        }
+
+        public IceRecord get(String sysId) {
+            checkNotNull(sysId);
+            TableHandler h = new TableHandler();
+            return h.queryTableByPrimaryField(tableName, sysId);
+        }
+
+        public IceRecord get(String fieldName, Object value) {
+            checkNotNull(fieldName);
+            checkNotNull(value);
+            TableHandler h = new TableHandler();
+            return h.queryTableByUniqueField(tableName, fieldName, value);
         }
 
         public WhereClause where(String where) {
@@ -41,9 +52,7 @@ public class Select {
 
         private Map<String, Object> params = new HashMap<>();
 
-        // private TableMeta meta;
-
-        public WhereClause(FromTable fromInfo, String clause) {
+        WhereClause(FromTable fromInfo, String clause) {
             this.fromInfo = fromInfo;
             this.clause = clause;
         }
@@ -77,19 +86,6 @@ public class Select {
             return this.handler.queryTable(this);
         }
 
-        // boolean loadTableMeta() {
-        // if (meta == null) {
-        // meta = handler.getTableMeta(fromInfo.tableName);
-        // }
-        // if (meta == null)
-        // return false;
-        // return true;
-        // }
-        //
-        // TableMeta getTableMeta() {
-        // return meta;
-        // }
-
         FromTable getFromInfo() {
             return this.fromInfo;
         }
@@ -101,6 +97,5 @@ public class Select {
         String getClause() {
             return clause;
         }
-
     }
 }

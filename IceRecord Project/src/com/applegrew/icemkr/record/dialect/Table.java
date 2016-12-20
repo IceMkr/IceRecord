@@ -52,7 +52,7 @@ public class Table {
 
         private CreateTable(String tableName) {
             meta = new TableMeta();
-            meta.tableName = tableName;
+            meta.setTableName(tableName);
 
             sysColProvider = IceRecordEnv.getExtComponent().createSystemColumnProvider();
         }
@@ -141,7 +141,7 @@ public class Table {
             return tableName;
         }
 
-        public Set<FieldMeta> getFields() {
+        public Set<FieldMeta> getFieldsMeta() {
             return fields;
         }
 
@@ -151,6 +151,15 @@ public class Table {
 
         public String getTableLabel() {
             return tableLabel;
+        }
+
+        public FieldMeta getPrimaryFieldMeta() {
+            for (FieldMeta fm : getFieldsMeta()) {
+                if (fm.getFieldType().isPrimary()) {
+                    return fm;
+                }
+            }
+            return null;
         }
 
     }

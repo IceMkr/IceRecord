@@ -2,6 +2,8 @@ import com.applegrew.icemkr.record.DaggerIceRecordExtensionComponent;
 import com.applegrew.icemkr.record.IceRecordConstants;
 import com.applegrew.icemkr.record.IceRecordEnv;
 import com.applegrew.icemkr.record.IceRecordExtensionsModule;
+import com.applegrew.icemkr.record.dialect.IceRecordInsert;
+import com.applegrew.icemkr.record.dialect.Insert;
 import com.applegrew.icemkr.record.dialect.Schema;
 import com.applegrew.icemkr.record.dialect.Table;
 import com.applegrew.icemkr.record.extension.impl.MySqlConnectionManager;
@@ -19,11 +21,11 @@ public class TestMain {
         IceRecordEnv.setExtComponent(DaggerIceRecordExtensionComponent.builder()
                 .iceRecordExtensionsModule(new IceRecordExtensionsModule(config)).build());
 
-        Schema.select(config.dbName).createIfNotExists().butIfFailedCall(e -> {
+        Schema.select(config.dbName).deleteIfExists().createIfNotExists().butIfFailedCall(e -> {
             System.err.println(e);
             return null;
         }).elseCall(() -> {
-            if (!Table.setupSysTablesIfNeeded().hasError())
+            if (!Table.setupSysTablesIfNeeded().hasError()) {
                 Table.createIfNotExists("test")
                         .withFields(
                                 FieldMeta
@@ -31,6 +33,14 @@ public class TestMain {
                                                 IceRecordConstants.CoreFieldTypeNames.STRING)
                                         .build())
                         .commit();
+                IceRecordInsert r = Insert.into("test");
+                if (!r.isValid())
+                    System.err.println("Table not valid!");
+                r.setValue("xyz", "Something");
+                System.out.println(r.insert());
+                if (r.hasError())
+                    System.err.println(r.getLastError());
+            }
         });
 
     }
