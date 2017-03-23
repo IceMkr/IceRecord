@@ -38,6 +38,10 @@ public class Select {
             return new WhereClause(this, where);
         }
 
+        public IceRecord queryAll() {
+            return new WhereClause(this, null).query();
+        }
+
         String getTableName() {
             return tableName;
         }
@@ -78,6 +82,7 @@ public class Select {
          * @return
          */
         public WhereClause addParamValue(String field, Object value) {
+            checkNotNull(value);
             this.params.put(field, value);
             return this;
         }

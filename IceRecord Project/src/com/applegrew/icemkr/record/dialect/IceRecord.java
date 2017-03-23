@@ -3,6 +3,7 @@ package com.applegrew.icemkr.record.dialect;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.apache.commons.dbutils.DbUtils;
 import org.apache.commons.dbutils.ResultSetHandler;
 
 import com.applegrew.icemkr.record.dialect.Table.TableMeta;
@@ -15,6 +16,8 @@ public class IceRecord extends AIceRecordBase {
     protected String whereClauseSql; // Could be null if isValid is false
 
     protected boolean isEmpty;
+
+    protected boolean isRSClosed;
 
     protected ResultSetHandler<Void> rsHandler = new ResultSetHandler<Void>() {
         @Override
@@ -42,6 +45,8 @@ public class IceRecord extends AIceRecordBase {
     public boolean next() {
         if (!isValid)
             return false;
+        if (isRSClosed)
+            return false;
         try {
             return resultSet.next();
         } catch (SQLException e) {
@@ -49,6 +54,30 @@ public class IceRecord extends AIceRecordBase {
             e.printStackTrace();
         }
         return false;
+    }
+
+    protected void selectFirstRecord() {
+        if (!isValid || isRSClosed)
+            return;
+        try {
+            if (!resultSet.isBeforeFirst())
+                return;
+            this.next();
+        } catch (SQLException e) {
+            setLastError(IceRecordException.wrap(e));
+            e.printStackTrace();
+        }
+    }
+
+    protected void close() {
+        isRSClosed = true;
+        try {
+            if (!isRSClosed)
+                DbUtils.close(resultSet);
+        } catch (SQLException e) {
+            setLastError(IceRecordException.wrap(e));
+            e.printStackTrace();
+        }
     }
 
     protected boolean onFieldInstanceInit(String fieldName, Field<?> f, ScalarType st) {
@@ -116,6 +145,7 @@ public class IceRecord extends AIceRecordBase {
     public int updateMultiple() {
         if (!isValid)
             return 0;
+        close();
         TableHandler h = getHandler();
         int count = h.updateMultipleRecords(meta, whereClauseSql, fieldsMap.values());
         if (count == 0) {
@@ -141,6 +171,7 @@ public class IceRecord extends AIceRecordBase {
     public int deleteMultiple() {
         if (!isValid)
             return 0;
+        close();
         TableHandler h = getHandler();
         int count = h.deleteMultipleRecords(meta, whereClauseSql);
         if (count == 0) {
@@ -149,5 +180,4 @@ public class IceRecord extends AIceRecordBase {
         }
         return count;
     }
-
 }

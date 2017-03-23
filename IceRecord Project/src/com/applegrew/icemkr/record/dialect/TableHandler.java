@@ -2,6 +2,9 @@ package com.applegrew.icemkr.record.dialect;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -10,6 +13,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.apache.commons.dbutils.DbUtils;
 import org.apache.commons.dbutils.QueryRunner;
 import org.apache.commons.dbutils.ResultSetHandler;
 import org.apache.commons.dbutils.handlers.BeanListHandler;
@@ -20,6 +24,7 @@ import com.applegrew.icemkr.record.dialect.Select.FromTable;
 import com.applegrew.icemkr.record.dialect.Select.WhereClause;
 import com.applegrew.icemkr.record.dialect.Table.TableMeta;
 import com.applegrew.icemkr.record.extension.IConnectionManager;
+import com.applegrew.icemkr.record.extension.IConnectionManager.RunningDBFlavor;
 import com.applegrew.icemkr.record.field.Field;
 import com.applegrew.icemkr.record.field.FieldMeta;
 import com.applegrew.icemkr.record.field.FieldType;
@@ -127,65 +132,12 @@ public class TableHandler {
         lastError = ex;
     }
 
-    public TableMeta getTableMeta(String tableName) {
-        checkNotNull(tableName);
-        if (tableName.equals(IceRecordConstants.CoreTableNames.SYS_COLLECTION))
-            return SYS_COLLECTION_META;
-        if (tableName.equals(IceRecordConstants.CoreTableNames.SYS_DICTIONARY))
-            return SYS_DICTIONARY_META;
-
-        QueryRunner runner = new QueryRunner(dataSource);
-        ResultSetHandler<List<TableFieldMetaCombinedBean>> h = new BeanListHandler<TableFieldMetaCombinedBean>(
-                TableFieldMetaCombinedBean.class);
+    private Connection getConnForQuery() {
+        Connection conn;
         try {
-            StringBuffer bf = new StringBuffer();
-            bf.append("SELECT ").append("c.").append(IceRecordConstants.FieldNames.NAME)
-                    .append(" tableName, c.").append(IceRecordConstants.FieldNames.LABEL)
-                    .append(" tableLabel, c.").append(IceRecordConstants.FieldNames.EXTENDS)
-                    .append(" parentTableName, d.").append(IceRecordConstants.FieldNames.NAME)
-                    .append(" fieldName, d.").append(IceRecordConstants.FieldNames.LABEL)
-                    .append(" fieldLabel, d.").append(IceRecordConstants.FieldNames.TYPE)
-                    .append(" fieldType, d.").append(IceRecordConstants.FieldNames.MAX_LENGTH)
-                    .append(" maxLength, d.").append(IceRecordConstants.FieldNames.READONLY)
-                    .append(" readOnly, d.").append(IceRecordConstants.FieldNames.MANDATORY)
-                    .append(" mandatory, d.").append(IceRecordConstants.FieldNames.DISPLAY)
-                    .append(" display, d.").append(IceRecordConstants.FieldNames.UNIQUE)
-                    .append(" unique_, d.").append(IceRecordConstants.FieldNames.DEFAULT_VALUE)
-                    .append(" defaultValue FROM ")
-                    .append(IceRecordConstants.CoreTableNames.SYS_COLLECTION).append(" c, ")
-                    .append(IceRecordConstants.CoreTableNames.SYS_DICTIONARY).append(" d WHERE c.")
-                    .append(IceRecordConstants.FieldNames.SYS_ID).append(" = d.")
-                    .append(IceRecordConstants.FieldNames.COLLECTION).append(" AND c.name = ?");
-            String sql = bf.toString();
-            System.out.println(sql);
-            List<TableFieldMetaCombinedBean> res = runner.query(sql, h, tableName);
-            if (res.isEmpty()) {
-                throw new IllegalArgumentException("Invalid table");
-            }
-            TableMeta m = new TableMeta();
-            boolean isFirst = true;
-            for (TableFieldMetaCombinedBean b : res) {
-                if (isFirst) {
-                    m.parentTableName = b.parentTableName;
-                    m.setTableName(b.tableName);
-                    m.tableLabel = b.tableLabel;
-                    isFirst = false;
-                }
-                FieldMeta.Builder fmb = FieldMeta
-                        .createWithFieldNameAndFieldType(b.fieldName, b.fieldType)
-                        .withFieldLabel(b.fieldLabel).withMaxLength(b.maxLength)
-                        .withDefaultExpression(b.defaultValue);
-                if (b.display)
-                    fmb.whichIsDisplayField();
-                if (b.mandatory)
-                    fmb.whichIsMandatory();
-                if (b.readOnly)
-                    fmb.whichIsReadonly();
-                if (b.unique)
-                    fmb.whichIsUnique();
-                m.addUniqueFieldMeta(fmb.build());
-            }
-            return m;
+            conn = dataSource.getConnection();
+            conn.setAutoCommit(false);
+            return conn;
         } catch (SQLException e) {
             setLastError(IceRecordException.wrap(e));
             e.printStackTrace();
@@ -193,44 +145,141 @@ public class TableHandler {
         return null;
     }
 
-    public boolean createTable(TableMeta meta) {
-        checkNotNull(meta);
-        String sql = getCreateTableSql(meta);
-        System.out.println(sql);
-        QueryRunner runner = new QueryRunner(this.dataSource);
+    private Connection getConnForUpdate() {
+        Connection conn;
         try {
-            runner.update(sql);
-            if (IceRecordConstants.CoreTableNames.SYS_COLLECTION.equals(meta.getTableName())
-                    || IceRecordConstants.CoreTableNames.SYS_DICTIONARY.equals(meta.getTableName()))
-                return true;
-
-            IceRecordInsert r = Insert.into(IceRecordConstants.CoreTableNames.SYS_COLLECTION);
-            r.setValue(IceRecordConstants.FieldNames.NAME, meta.getTableName());
-            r.setValue(IceRecordConstants.FieldNames.LABEL, meta.getTableLabel());
-            String tableSysid = r.insert();
-            if (tableSysid != null) {
-                for (FieldMeta fm : meta.getFieldsMeta()) {
-                    r = Insert.into(IceRecordConstants.CoreTableNames.SYS_DICTIONARY);
-                    r.setValue(IceRecordConstants.FieldNames.COLLECTION, tableSysid);
-                    r.setValue(IceRecordConstants.FieldNames.NAME, fm.getFieldName());
-                    r.setValue(IceRecordConstants.FieldNames.LABEL, fm.getFieldLabel());
-                    r.setValue(IceRecordConstants.FieldNames.TYPE, fm.getFieldType().getName());
-                    r.setValue(IceRecordConstants.FieldNames.MAX_LENGTH, fm.getMaxLength());
-                    r.setValue(IceRecordConstants.FieldNames.READONLY, fm.isReadonly());
-                    r.setValue(IceRecordConstants.FieldNames.MANDATORY, fm.isMandatory());
-                    r.setValue(IceRecordConstants.FieldNames.DISPLAY, fm.isDisplay());
-                    r.setValue(IceRecordConstants.FieldNames.UNIQUE, fm.isUnique());
-                    r.setValue(IceRecordConstants.FieldNames.DEFAULT_VALUE,
-                            fm.getDefaultValueExpression());
-                    if (r.insert() == null)
-                        return false;
-                }
-                return true;
-            }
+            conn = dataSource.getConnection();
+            conn.setAutoCommit(true);
+            return conn;
         } catch (SQLException e) {
             setLastError(IceRecordException.wrap(e));
             e.printStackTrace();
         }
+        return null;
+    }
+
+    private void closeConn(Connection conn) {
+        try {
+            DbUtils.close(conn);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public TableMeta getTableMeta(String tableName) {
+        checkNotNull(tableName);
+        if (tableName.equals(IceRecordConstants.CoreTableNames.SYS_COLLECTION))
+            return SYS_COLLECTION_META;
+        if (tableName.equals(IceRecordConstants.CoreTableNames.SYS_DICTIONARY))
+            return SYS_DICTIONARY_META;
+
+        QueryRunner runner = new QueryRunnerForQuery();
+        ResultSetHandler<List<TableFieldMetaCombinedBean>> h = new BeanListHandler<TableFieldMetaCombinedBean>(
+                TableFieldMetaCombinedBean.class);
+        Connection conn = getConnForQuery();
+        if (conn != null)
+            try {
+                StringBuffer bf = new StringBuffer();
+                bf.append("SELECT ").append("c.").append(IceRecordConstants.FieldNames.NAME)
+                        .append(" tableName, c.").append(IceRecordConstants.FieldNames.LABEL)
+                        .append(" tableLabel, c.").append(IceRecordConstants.FieldNames.EXTENDS)
+                        .append(" parentTableName, d.").append(IceRecordConstants.FieldNames.NAME)
+                        .append(" fieldName, d.").append(IceRecordConstants.FieldNames.LABEL)
+                        .append(" fieldLabel, d.").append(IceRecordConstants.FieldNames.TYPE)
+                        .append(" fieldType, d.").append(IceRecordConstants.FieldNames.MAX_LENGTH)
+                        .append(" maxLength, d.").append(IceRecordConstants.FieldNames.READONLY)
+                        .append(" readOnly, d.").append(IceRecordConstants.FieldNames.MANDATORY)
+                        .append(" mandatory, d.").append(IceRecordConstants.FieldNames.DISPLAY)
+                        .append(" display, d.").append(IceRecordConstants.FieldNames.UNIQUE)
+                        .append(" unique_, d.").append(IceRecordConstants.FieldNames.DEFAULT_VALUE)
+                        .append(" defaultValue FROM ")
+                        .append(IceRecordConstants.CoreTableNames.SYS_COLLECTION).append(" c, ")
+                        .append(IceRecordConstants.CoreTableNames.SYS_DICTIONARY)
+                        .append(" d WHERE c.").append(IceRecordConstants.FieldNames.SYS_ID)
+                        .append(" = d.").append(IceRecordConstants.FieldNames.COLLECTION)
+                        .append(" AND c.name = ?");
+                String sql = bf.toString();
+                System.out.println(sql);
+                List<TableFieldMetaCombinedBean> res = runner.query(conn, sql, h, tableName);
+                if (res.isEmpty()) {
+                    throw new IllegalArgumentException("Invalid table");
+                }
+                TableMeta m = new TableMeta();
+                boolean isFirst = true;
+                for (TableFieldMetaCombinedBean b : res) {
+                    if (isFirst) {
+                        m.parentTableName = b.parentTableName;
+                        m.setTableName(b.tableName);
+                        m.tableLabel = b.tableLabel;
+                        isFirst = false;
+                    }
+                    FieldMeta.Builder fmb = FieldMeta
+                            .createWithFieldNameAndFieldType(b.fieldName, b.fieldType)
+                            .withFieldLabel(b.fieldLabel).withMaxLength(b.maxLength)
+                            .withDefaultExpression(b.defaultValue);
+                    if (b.display)
+                        fmb.whichIsDisplayField();
+                    if (b.mandatory)
+                        fmb.whichIsMandatory();
+                    if (b.readOnly)
+                        fmb.whichIsReadonly();
+                    if (b.unique)
+                        fmb.whichIsUnique();
+                    m.addUniqueFieldMeta(fmb.build());
+                }
+                return m;
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
+        return null;
+    }
+
+    public boolean createTable(TableMeta meta) {
+        checkNotNull(meta);
+        String sql = getCreateTableSql(meta);
+        System.out.println(sql);
+        QueryRunner runner = new QueryRunner();
+        Connection conn = getConnForUpdate();
+        if (conn != null)
+            try {
+                runner.update(conn, sql);
+                if (IceRecordConstants.CoreTableNames.SYS_COLLECTION.equals(meta.getTableName())
+                        || IceRecordConstants.CoreTableNames.SYS_DICTIONARY
+                                .equals(meta.getTableName()))
+                    return true;
+
+                IceRecordInsert r = Insert.into(IceRecordConstants.CoreTableNames.SYS_COLLECTION);
+                r.setValue(IceRecordConstants.FieldNames.NAME, meta.getTableName());
+                r.setValue(IceRecordConstants.FieldNames.LABEL, meta.getTableLabel());
+                String tableSysid = r.insert();
+                if (tableSysid != null) {
+                    for (FieldMeta fm : meta.getFieldsMeta()) {
+                        r = Insert.into(IceRecordConstants.CoreTableNames.SYS_DICTIONARY);
+                        r.setValue(IceRecordConstants.FieldNames.COLLECTION, tableSysid);
+                        r.setValue(IceRecordConstants.FieldNames.NAME, fm.getFieldName());
+                        r.setValue(IceRecordConstants.FieldNames.LABEL, fm.getFieldLabel());
+                        r.setValue(IceRecordConstants.FieldNames.TYPE, fm.getFieldType().getName());
+                        r.setValue(IceRecordConstants.FieldNames.MAX_LENGTH, fm.getMaxLength());
+                        r.setValue(IceRecordConstants.FieldNames.READONLY, fm.isReadonly());
+                        r.setValue(IceRecordConstants.FieldNames.MANDATORY, fm.isMandatory());
+                        r.setValue(IceRecordConstants.FieldNames.DISPLAY, fm.isDisplay());
+                        r.setValue(IceRecordConstants.FieldNames.UNIQUE, fm.isUnique());
+                        r.setValue(IceRecordConstants.FieldNames.DEFAULT_VALUE,
+                                fm.getDefaultValueExpression());
+                        if (r.insert() == null)
+                            return false;
+                    }
+                    return true;
+                }
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
         return false;
     }
 
@@ -242,16 +291,20 @@ public class TableHandler {
             bf.append(sql);
         }
 
-        QueryRunner runner = new QueryRunner(this.dataSource);
-        try {
-            String sql = bf.toString();
-            System.out.println(sql);
-            runner.batch(sql, null);
-            return true;
-        } catch (SQLException e) {
-            setLastError(IceRecordException.wrap(e));
-            e.printStackTrace();
-        }
+        QueryRunner runner = new QueryRunner();
+        Connection conn = getConnForUpdate();
+        if (conn != null)
+            try {
+                String sql = bf.toString();
+                System.out.println(sql);
+                runner.batch(conn, sql, null);
+                return true;
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
         return false;
     }
 
@@ -324,15 +377,19 @@ public class TableHandler {
             values.append(" ").append(getScalarValueForAssigmentSql(f.getScalarValue()));
         }
         b.append(") VALUES (").append(values).append(");");
-        QueryRunner runner = new QueryRunner(dataSource);
-        try {
-            String sql = b.toString();
-            System.out.println(sql);
-            return runner.update(sql);
-        } catch (SQLException e) {
-            setLastError(IceRecordException.wrap(e));
-            e.printStackTrace();
-        }
+        QueryRunner runner = new QueryRunner();
+        Connection conn = getConnForUpdate();
+        if (conn != null)
+            try {
+                String sql = b.toString();
+                System.out.println(sql);
+                return runner.update(conn, sql);
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
         return 0;
     }
 
@@ -340,15 +397,19 @@ public class TableHandler {
         StringBuffer b = new StringBuffer();
         b.append("DELETE FROM ").append(entityName(meta.getTableName())).append(" WHERE ")
                 .append(whereClauseSql).append(";");
-        QueryRunner runner = new QueryRunner(dataSource);
-        try {
-            String sql = b.toString();
-            System.out.println(sql);
-            return runner.update(sql);
-        } catch (SQLException e) {
-            setLastError(IceRecordException.wrap(e));
-            e.printStackTrace();
-        }
+        QueryRunner runner = new QueryRunner();
+        Connection conn = getConnForUpdate();
+        if (conn != null)
+            try {
+                String sql = b.toString();
+                System.out.println(sql);
+                return runner.update(conn, sql);
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
         return 0;
     }
 
@@ -366,15 +427,19 @@ public class TableHandler {
                     .append(getScalarValueForAssigmentSql(f.getScalarValue()));
         }
         b.append(" WHERE ").append(whereClauseSql).append(";");
-        QueryRunner runner = new QueryRunner(dataSource);
-        try {
-            String sql = b.toString();
-            System.out.println(sql);
-            return runner.update(sql);
-        } catch (SQLException e) {
-            setLastError(IceRecordException.wrap(e));
-            e.printStackTrace();
-        }
+        QueryRunner runner = new QueryRunner();
+        Connection conn = getConnForUpdate();
+        if (conn != null)
+            try {
+                String sql = b.toString();
+                System.out.println(sql);
+                return runner.update(conn, sql);
+            } catch (SQLException e) {
+                setLastError(IceRecordException.wrap(e));
+                e.printStackTrace();
+            } finally {
+                closeConn(conn);
+            }
         return 0;
     }
 
@@ -434,7 +499,7 @@ public class TableHandler {
         String whereClauseSql = createSqlFromWhereClause(whereClause);
         IceRecord record = new IceRecord(tm, whereClauseSql);
         if (whereClauseSql != null) {
-            QueryRunner runner = new QueryRunner(dataSource);
+            QueryRunner runner = new NoAutoCloseQueryRunner(dataSource);
             try {
                 String sql = b.append(whereClauseSql).toString();
                 System.out.println(sql);
@@ -453,7 +518,10 @@ public class TableHandler {
         String queryTableName = whereClause.getFromInfo().getTableName();
         ParsedExpression exp;
         try {
-            exp = new WhereClauseParser(whereClause.getClause()).parse();
+            String clause = whereClause.getClause();
+            if (clause == null || clause.isEmpty())
+                return "(1=1)";
+            exp = new WhereClauseParser(clause).parse();
             Map<String, Object> paramMap = whereClause.getParams();
             for (FieldExpression fe : exp.paramFields) {
                 Object v = paramMap.get(fe.field.getQualifiedFieldName());
@@ -676,8 +744,13 @@ public class TableHandler {
     }
 
     private String getSqlForScalarsInWhereClause(Object o, LikeCharPos pos) {
+        if (o == null)
+            throw new IllegalArgumentException(
+                    "Unsupported where-clause constant. Got null but needed a value.");
         if (o instanceof Integer || o instanceof Float || o instanceof Double)
             return o.toString();
+        else if (o instanceof Boolean)
+            return Boolean.TRUE.equals(o) ? "1" : "0";
         else if (o instanceof String)
             return getSqlStringLiteral(o.toString(), pos);
         else if (o instanceof List) {
@@ -691,7 +764,7 @@ public class TableHandler {
             return b.toString();
         } else
             throw new IllegalArgumentException(
-                    "Unsupported array constant. Expected one of Integer, Float, Double or String but got "
+                    "Unsupported where-clause constant. Expected one of Integer, Float, Double, Boolean or String but got "
                             + o.getClass());
     }
 
@@ -784,5 +857,32 @@ public class TableHandler {
         public void setDefaultValue(String defaultValue) {
             this.defaultValue = defaultValue;
         }
+    }
+
+    public static class NoAutoCloseQueryRunner extends QueryRunner {
+        public NoAutoCloseQueryRunner(DataSource ds) {
+            super(ds);
+        }
+
+        @Override
+        protected void close(ResultSet rs) {
+            // noop;
+        }
+    }
+
+    public class QueryRunnerForQuery extends QueryRunner {
+
+        public QueryRunnerForQuery() {
+        }
+
+        @Override
+        protected PreparedStatement prepareStatement(Connection conn, String sql)
+                throws SQLException {
+            PreparedStatement stmt = super.prepareStatement(conn, sql);
+            stmt.setFetchSize(connManager.getDBFlavor().equals(RunningDBFlavor.MYSQL)
+                    ? Integer.MIN_VALUE : 100); // TODO text this
+            return stmt;
+        }
+
     }
 }
